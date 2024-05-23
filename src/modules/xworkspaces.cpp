@@ -10,6 +10,7 @@
 #include "utils/math.hpp"
 #include "x11/atoms.hpp"
 #include "x11/connection.hpp"
+#include "x11/ewmh.hpp"
 #include "x11/icccm.hpp"
 
 POLYBAR_NS
@@ -131,6 +132,7 @@ namespace modules {
   void xworkspaces_module::rebuild_clientlist() {
     vector<xcb_window_t> newclients = ewmh_util::get_client_list();
     std::sort(newclients.begin(), newclients.end());
+    m_log.notice("DEBUG: %s", __func__);
 
     for (auto&& client : newclients) {
       if (m_clients.count(client) == 0) {
@@ -151,11 +153,41 @@ namespace modules {
 
     // rebuild entire mapping of clients to desktops
     m_clients.clear();
-    m_windows.clear();
+    m_windows.clear(); //TODO: clear mapped vectors?
     for (auto&& client : newclients) {
+      //XXX: a not exisisting client always shows up, why? it's the polybar itself
       auto desk = ewmh_util::get_desktop_from_window(client);
       m_clients[client] = desk;
-      m_windows[desk]++;
+      string app_name = icccm_util::get_wm_class(m_connection, client).second;
+      string app_icon = ""; //fallback
+      if (app_name.compare("Polybar") == 0)
+        continue;
+      if (app_name.compare("Steam") == 0)
+        app_icon = "";
+      else if (app_name.compare("vlc") == 0)
+        app_icon = "";
+      else if (app_name.compare("Thunderbird") == 0)
+        app_icon = "";
+      else if (app_name.compare("thunderbird") == 0)
+        app_icon = "";
+      else if (app_name.compare("firefox") == 0)
+        app_icon = "";
+      else if (app_name.compare("Chromium") == 0)
+        app_icon = "";
+      else if (app_name.compare("Alacritty") == 0)
+        app_icon = "";
+      else if (app_name.compare("TelegramDesktop") == 0)
+        app_icon = "";
+
+      m_windows[desk].emplace_back(app_icon);
+      // https://crates.io/crates/sworkstyle
+      // https://github.com/Lyr-7D1h/swayest_workstyle/blob/868e6703ec8e167b2214cd69ca270f39a8071f23/src/lib.rs#L155
+      //m_log.notice(
+      //    "DEBUG: desk: %d, m_windows[desk].size(): %d, app_name %s, wm_class.1: %s, wm_class.2: %s, wm_name: %s, "
+      //    "m_windows[desk].back(): %s",
+      //    desk, m_windows[desk].size(), app_name, icccm_util::get_wm_class(m_connection, client).first,
+      //    icccm_util::get_wm_class(m_connection, client).second, icccm_util::get_wm_name(m_connection, client),
+      //    m_windows[desk].back());
     }
 
     rebuild_urgent_hints();
@@ -306,7 +338,11 @@ namespace modules {
         d->label->reset_tokens();
         d->label->replace_token("%index%", to_string(d->index + 1));
         d->label->replace_token("%name%", m_desktop_names[d->index]);
-        d->label->replace_token("%nwin%", to_string(m_windows[d->index]));
+        d->label->replace_token("%nwin%", to_string(m_windows[d->index].size()));
+        string win_icons = "";
+        for (size_t i = 0; i != m_windows[d->index].size(); ++i)
+          win_icons = win_icons + m_windows[d->index][i];
+        d->label->replace_token("%win_icons%", win_icons);
         d->label->replace_token("%icon%", m_icons->get(m_desktop_names[d->index], DEFAULT_ICON)->get());
       }
     }
